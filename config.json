@@ -1,10 +1,9 @@
 {
-  "telegramApiToken": null,
-  "chatId": null,
   "projects": [
     {
-      "topic": "",
-      "url": ""
+      "title": "רמת השרון",
+      "url": "https://www.yad2.co.il/realestate/forsale?city=8600",
+      "type": "realestate"
     }
   ]
 }
