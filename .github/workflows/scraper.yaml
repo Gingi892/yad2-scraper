@@ -14,10 +14,10 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install packages
+      - name: Install dependencies
         run: yarn install
 
       - name: Setup git config
@@ -25,20 +25,16 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "${{ secrets.GIT_CONFIG_EMAIL }}"
 
-      - name: Run scraper (Telegram + WhatsApp Twilio)
+      - name: Run scraper (Telegram only)
         run: |
           export API_TOKEN=${{ secrets.API_TOKEN }}
           export CHAT_ID=${{ secrets.CHAT_ID }}
-          export TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
-          export TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
-          export TWILIO_WHATSAPP_FROM=${{ secrets.TWILIO_WHATSAPP_FROM }}
-          export TWILIO_WHATSAPP_TO=${{ secrets.TWILIO_WHATSAPP_TO }}
           yarn scrape
 
       - name: Push new json data if needed
         run: |
           if [ -f ./push_me ]; then
-            echo Pushing to Github...
+            echo "Pushing updates to GitHub..."
             git add .
             DATE=$(date +"%F, %H:%M:%S")
             git commit -m "updated data - $DATE"
