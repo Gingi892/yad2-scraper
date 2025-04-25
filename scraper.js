@@ -2,6 +2,7 @@ const cheerio = require('cheerio');
 const Telenode = require('telenode-js');
 const fs = require('fs');
 const config = require('./config.json');
+const fetch = require('node-fetch'); // נדרש לשליחת WhatsApp
 
 const getYad2Response = async (url) => {
     const requestOptions = {
@@ -48,7 +49,7 @@ const checkIfHasNewItem = async (imgUrls, topic) => {
         savedUrls = require(filePath);
     } catch (e) {
         if (e.code === "MODULE_NOT_FOUND") {
-            fs.mkdirSync('data');
+            fs.mkdirSync('data', { recursive: true });
             fs.writeFileSync(filePath, '[]');
         } else {
             console.log(e);
@@ -80,27 +81,66 @@ const createPushFlagForWorkflow = () => {
     fs.writeFileSync("push_me", "")
 }
 
+// פונקציה חדשה ששולחת הודעת וואטסאפ דרך Meta API
+const sendWhatsappMessage = async (text) => {
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneNumberId = process.env.PHONE_NUMBER_ID;
+    const recipientPhone = process.env.RECIPIENT_PHONE;
+
+    if (!token || !phoneNumberId || !recipientPhone) {
+        console.warn("Missing WhatsApp environment variables, skipping WhatsApp send.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: recipientPhone,
+                type: 'text',
+                text: { body: text }
+            })
+        });
+        const json = await response.json();
+        console.log("WhatsApp API response:", json);
+    } catch (err) {
+        console.error("Failed to send WhatsApp message:", err.message);
+    }
+}
+
 const scrape = async (topic, url) => {
     const apiToken = process.env.API_TOKEN || config.telegramApiToken;
     const chatId = process.env.CHAT_ID || config.chatId;
     const telenode = new Telenode({apiToken})
+
     try {
-        await telenode.sendTextMessage(`Starting scanning ${topic} on link:\n${url}`, chatId)
+        const intro = `Starting scanning ${topic} on link:\n${url}`;
+        await telenode.sendTextMessage(intro, chatId)
+        await sendWhatsappMessage(intro);
+
         const scrapeImgResults = await scrapeItemsAndExtractImgUrls(url);
         const newItems = await checkIfHasNewItem(scrapeImgResults, topic);
+
         if (newItems.length > 0) {
             const newItemsJoined = newItems.join("\n----------\n");
-            const msg = `${newItems.length} new items:\n${newItemsJoined}`
+            const msg = `${newItems.length} new items for ${topic}:\n${newItemsJoined}`;
             await telenode.sendTextMessage(msg, chatId);
+            await sendWhatsappMessage(msg);
         } else {
-            await telenode.sendTextMessage("No new items were added", chatId);
+            const noNewMsg = `No new items were added for ${topic}`;
+            await telenode.sendTextMessage(noNewMsg, chatId);
+            await sendWhatsappMessage(noNewMsg);
         }
+
     } catch (e) {
-        let errMsg = e?.message || "";
-        if (errMsg) {
-            errMsg = `Error: ${errMsg}`
-        }
-        await telenode.sendTextMessage(`Scan workflow failed... 😥\n${errMsg}`, chatId)
+        const errMsg = `Scan workflow failed... 😥\n${e?.message || e}`;
+        await telenode.sendTextMessage(errMsg, chatId);
+        await sendWhatsappMessage(errMsg);
         throw new Error(e)
     }
 }
