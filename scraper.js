@@ -2,7 +2,7 @@ const cheerio = require('cheerio');
 const Telenode = require('telenode-js');
 const fs = require('fs');
 const config = require('./config.json');
-const fetch = require('node-fetch'); // נדרש לשליחת WhatsApp
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const getYad2Response = async (url) => {
     const requestOptions = {
