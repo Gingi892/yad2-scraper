@@ -2,151 +2,105 @@ const cheerio = require('cheerio');
 const Telenode = require('telenode-js');
 const fs = require('fs');
 const config = require('./config.json');
-const twilio = require('twilio');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const getYad2Response = async (url) => {
-    const requestOptions = {
-        method: 'GET',
-        redirect: 'follow'
-    };
     try {
-        const res = await fetch(url, requestOptions)
-        return await res.text()
+        const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+        return await res.text();
     } catch (err) {
-        console.log(err)
+        console.error("Failed to fetch page:", err.message);
     }
-}
+};
 
-const scrapeItemsAndExtractImgUrls = async (url) => {
-    const yad2Html = await getYad2Response(url);
-    if (!yad2Html) {
-        throw new Error("Could not get Yad2 response");
-    }
-    const $ = cheerio.load(yad2Html);
-    const title = $("title")
-    const titleText = title.first().text();
-    if (titleText === "ShieldSquare Captcha") {
-        throw new Error("Bot detection");
-    }
-    const $feedItems = $(".feeditem").find(".pic");
-    if (!$feedItems) {
-        throw new Error("Could not find feed items");
-    }
-    const imageUrls = []
-    $feedItems.each((_, elm) => {
-        const imgSrc = $(elm).find("img").attr('src');
-        if (imgSrc) {
-            imageUrls.push(imgSrc)
-        }
-    })
-    return imageUrls;
-}
+const parseFeedItems = ($, url) => {
+    const feedItems = [];
+    $(".feeditem").each((_, el) => {
+        const type = url.includes("rent") ? "להשכרה" : "למכירה";
+        const link = $(el).attr("href");
+        const fullLink = `https://www.yad2.co.il${link}`;
+        const title = $(el).find(".title").text().trim();
+        const rooms = $(el).find(".rooms").text().trim();
+        const price = $(el).find(".price").text().trim();
+        const address = $(el).find(".subtitle").text().trim();
+        const [street = "", number = ""] = address.split(" ");
+        
+        feedItems.push({
+            id: fullLink.split("/").pop(),
+            fullLink,
+            type,
+            street,
+            number,
+            rooms,
+            price
+        });
+    });
+    return feedItems;
+};
 
-const checkIfHasNewItem = async (imgUrls, topic) => {
+const checkIfHasNewItems = async (items, topic) => {
     const filePath = `./data/${topic}.json`;
-    let savedUrls = [];
+    let savedIds = [];
     try {
-        savedUrls = require(filePath);
+        savedIds = require(filePath);
     } catch (e) {
         if (e.code === "MODULE_NOT_FOUND") {
             fs.mkdirSync('data', { recursive: true });
             fs.writeFileSync(filePath, '[]');
         } else {
-            console.log(e);
             throw new Error(`Could not read / create ${filePath}`);
         }
     }
-    let shouldUpdateFile = false;
-    savedUrls = savedUrls.filter(savedUrl => {
-        shouldUpdateFile = true;
-        return imgUrls.includes(savedUrl);
-    });
-    const newItems = [];
-    imgUrls.forEach(url => {
-        if (!savedUrls.includes(url)) {
-            savedUrls.push(url);
-            newItems.push(url);
-            shouldUpdateFile = true;
-        }
-    });
-    if (shouldUpdateFile) {
-        const updatedUrls = JSON.stringify(savedUrls, null, 2);
-        fs.writeFileSync(filePath, updatedUrls);
-        await createPushFlagForWorkflow();
+
+    const newItems = items.filter(item => !savedIds.includes(item.id));
+    if (newItems.length > 0) {
+        const updatedIds = [...savedIds, ...newItems.map(item => item.id)];
+        fs.writeFileSync(filePath, JSON.stringify(updatedIds, null, 2));
     }
+
     return newItems;
-}
+};
 
-const createPushFlagForWorkflow = () => {
-    fs.writeFileSync("push_me", "")
-}
+const formatMessage = (items) => {
+    const header = `נמצאו ${items.length} מודעות חדשות:\n`;
+    const body = items.map(item => {
+        return `${item.type} / ${item.street} / ${item.number} / ${item.rooms} / ${item.price}\n🔗 ${item.fullLink}`;
+    }).join("\n\n");
+    return header + body;
+};
 
-const sendWhatsappMessage = async (text) => {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const from = process.env.TWILIO_WHATSAPP_FROM; // Twilio Sandbox Number
-    const to = process.env.TWILIO_WHATSAPP_TO; // Your verified number
-
-    if (!accountSid || !authToken || !from || !to) {
-        console.warn("Missing Twilio environment variables, skipping WhatsApp send.");
-        return;
-    }
-
-    const client = twilio(accountSid, authToken);
-
-    try {
-        const message = await client.messages.create({
-            from: `whatsapp:${from}`,
-            to: `whatsapp:${to}`,
-            body: text
-        });
-        console.log("WhatsApp message sent via Twilio:", message.sid);
-    } catch (error) {
-        console.error("Failed to send WhatsApp message via Twilio:", error.message);
-    }
-}
-
-const scrape = async (topic, url) => {
+const sendTelegramMessage = async (text) => {
     const apiToken = process.env.API_TOKEN || config.telegramApiToken;
     const chatId = process.env.CHAT_ID || config.chatId;
-    const telenode = new Telenode({apiToken})
+    const telenode = new Telenode({ apiToken });
 
     try {
-        const intro = `Starting scanning ${topic} on link:\n${url}`;
-        await telenode.sendTextMessage(intro, chatId)
-        await sendWhatsappMessage(intro);
+        await telenode.sendTextMessage(text, chatId);
+    } catch (err) {
+        console.error("Telegram send error:", err.message);
+    }
+};
 
-        const scrapeImgResults = await scrapeItemsAndExtractImgUrls(url);
-        const newItems = await checkIfHasNewItem(scrapeImgResults, topic);
+const scrape = async (topic, url) => {
+    try {
+        const html = await getYad2Response(url);
+        const $ = cheerio.load(html);
+        const items = parseFeedItems($, url);
+        const newItems = await checkIfHasNewItems(items, topic);
 
         if (newItems.length > 0) {
-            const newItemsJoined = newItems.join("\n----------\n");
-            const msg = `${newItems.length} new items for ${topic}:\n${newItemsJoined}`;
-            await telenode.sendTextMessage(msg, chatId);
-            await sendWhatsappMessage(msg);
-        } else {
-            const noNewMsg = `No new items were added for ${topic}`;
-            await telenode.sendTextMessage(noNewMsg, chatId);
-            await sendWhatsappMessage(noNewMsg);
+            const message = formatMessage(newItems);
+            await sendTelegramMessage(message);
         }
-
     } catch (e) {
-        const errMsg = `Scan workflow failed... 😥\n${e?.message || e}`;
-        await telenode.sendTextMessage(errMsg, chatId);
-        await sendWhatsappMessage(errMsg);
-        throw new Error(e)
+        console.error(`Error while scraping "${topic}":`, e.message);
     }
-}
+};
 
 const program = async () => {
-    await Promise.all(config.projects.filter(project => {
-        if (project.disabled) {
-            console.log(`Topic "${project.topic}" is disabled. Skipping.`);
-        }
-        return !project.disabled;
-    }).map(async project => {
-        await scrape(project.topic, project.url)
-    }))
+    await Promise.all(config.projects.filter(project => !project.disabled).map(async project => {
+        await scrape(project.topic, project.url);
+    }));
 };
 
 program();
