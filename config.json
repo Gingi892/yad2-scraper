@@ -1,9 +1,10 @@
 {
+  "telegramApiToken": "7632435291:AAGzeA5pAFcMJA1rsHTot0gSjeJxP9G-pwc",
+  "chatId": "651743843",
   "projects": [
     {
-      "title": "רמת השרון",
-      "url": "https://www.yad2.co.il/realestate/forsale?city=2650",
-      "type": "realestate"
+      "topic": "דירות ברמת השרון",
+      "url": "https://www.yad2.co.il/realestate/forsale?topArea=19&area=18&city=2650&srsltid=AfmBOopQimT7MgLPE4gN7nUS2u8htp431AzGuwfSlagEZfkIp2aiBikT&zoom=13"
     }
   ]
 }
