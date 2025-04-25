@@ -82,4 +82,71 @@ const createPushFlagForWorkflow = () => {
 }
 
 const sendWhatsappMessage = async (text) => {
-    const accountSid = process.env.TWILIO
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_WHATSAPP_FROM; // Twilio Sandbox Number
+    const to = process.env.TWILIO_WHATSAPP_TO; // Your verified number
+
+    if (!accountSid || !authToken || !from || !to) {
+        console.warn("Missing Twilio environment variables, skipping WhatsApp send.");
+        return;
+    }
+
+    const client = twilio(accountSid, authToken);
+
+    try {
+        const message = await client.messages.create({
+            from: `whatsapp:${from}`,
+            to: `whatsapp:${to}`,
+            body: text
+        });
+        console.log("WhatsApp message sent via Twilio:", message.sid);
+    } catch (error) {
+        console.error("Failed to send WhatsApp message via Twilio:", error.message);
+    }
+}
+
+const scrape = async (topic, url) => {
+    const apiToken = process.env.API_TOKEN || config.telegramApiToken;
+    const chatId = process.env.CHAT_ID || config.chatId;
+    const telenode = new Telenode({apiToken})
+
+    try {
+        const intro = `Starting scanning ${topic} on link:\n${url}`;
+        await telenode.sendTextMessage(intro, chatId)
+        await sendWhatsappMessage(intro);
+
+        const scrapeImgResults = await scrapeItemsAndExtractImgUrls(url);
+        const newItems = await checkIfHasNewItem(scrapeImgResults, topic);
+
+        if (newItems.length > 0) {
+            const newItemsJoined = newItems.join("\n----------\n");
+            const msg = `${newItems.length} new items for ${topic}:\n${newItemsJoined}`;
+            await telenode.sendTextMessage(msg, chatId);
+            await sendWhatsappMessage(msg);
+        } else {
+            const noNewMsg = `No new items were added for ${topic}`;
+            await telenode.sendTextMessage(noNewMsg, chatId);
+            await sendWhatsappMessage(noNewMsg);
+        }
+
+    } catch (e) {
+        const errMsg = `Scan workflow failed... 😥\n${e?.message || e}`;
+        await telenode.sendTextMessage(errMsg, chatId);
+        await sendWhatsappMessage(errMsg);
+        throw new Error(e)
+    }
+}
+
+const program = async () => {
+    await Promise.all(config.projects.filter(project => {
+        if (project.disabled) {
+            console.log(`Topic "${project.topic}" is disabled. Skipping.`);
+        }
+        return !project.disabled;
+    }).map(async project => {
+        await scrape(project.topic, project.url)
+    }))
+};
+
+program();
