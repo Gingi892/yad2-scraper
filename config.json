@@ -1,8 +1,12 @@
 {
   "projects": [
     {
-      "topic": "דירות ברמת השרון",
+      "topic": "דירות למכירה ברמת השרון",
       "url": "https://www.yad2.co.il/realestate/forsale?topArea=19&area=18&city=2650&srsltid=AfmBOopQimT7MgLPE4gN7nUS2u8htp431AzGuwfSlagEZfkIp2aiBikT&zoom=13"
+    },
+    {
+      "topic": "דירות להשכרה ברמת השרון",
+      "url": "https://www.yad2.co.il/realestate/rent?topArea=19&area=18&city=2650&srsltid=AfmBOoob5ppywsRis3aGpLoObKwJKBYeJpymzsEbtLhJGokJU9HkytD0&zoom=13"
     }
   ]
 }
