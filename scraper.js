@@ -2,7 +2,7 @@ const cheerio = require('cheerio');
 const Telenode = require('telenode-js');
 const fs = require('fs');
 const config = require('./config.json');
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const twilio = require('twilio');
 
 const getYad2Response = async (url) => {
     const requestOptions = {
@@ -81,79 +81,5 @@ const createPushFlagForWorkflow = () => {
     fs.writeFileSync("push_me", "")
 }
 
-// פונקציה חדשה ששולחת הודעת וואטסאפ דרך Meta API
 const sendWhatsappMessage = async (text) => {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneNumberId = process.env.PHONE_NUMBER_ID;
-    const recipientPhone = process.env.RECIPIENT_PHONE;
-
-    if (!token || !phoneNumberId || !recipientPhone) {
-        console.warn("Missing WhatsApp environment variables, skipping WhatsApp send.");
-        return;
-    }
-
-    try {
-        const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: recipientPhone,
-                type: 'text',
-                text: { body: text }
-            })
-        });
-        const json = await response.json();
-        console.log("WhatsApp API response:", json);
-    } catch (err) {
-        console.error("Failed to send WhatsApp message:", err.message);
-    }
-}
-
-const scrape = async (topic, url) => {
-    const apiToken = process.env.API_TOKEN || config.telegramApiToken;
-    const chatId = process.env.CHAT_ID || config.chatId;
-    const telenode = new Telenode({apiToken})
-
-    try {
-        const intro = `Starting scanning ${topic} on link:\n${url}`;
-        await telenode.sendTextMessage(intro, chatId)
-        await sendWhatsappMessage(intro);
-
-        const scrapeImgResults = await scrapeItemsAndExtractImgUrls(url);
-        const newItems = await checkIfHasNewItem(scrapeImgResults, topic);
-
-        if (newItems.length > 0) {
-            const newItemsJoined = newItems.join("\n----------\n");
-            const msg = `${newItems.length} new items for ${topic}:\n${newItemsJoined}`;
-            await telenode.sendTextMessage(msg, chatId);
-            await sendWhatsappMessage(msg);
-        } else {
-            const noNewMsg = `No new items were added for ${topic}`;
-            await telenode.sendTextMessage(noNewMsg, chatId);
-            await sendWhatsappMessage(noNewMsg);
-        }
-
-    } catch (e) {
-        const errMsg = `Scan workflow failed... 😥\n${e?.message || e}`;
-        await telenode.sendTextMessage(errMsg, chatId);
-        await sendWhatsappMessage(errMsg);
-        throw new Error(e)
-    }
-}
-
-const program = async () => {
-    await Promise.all(config.projects.filter(project => {
-        if (project.disabled) {
-            console.log(`Topic "${project.topic}" is disabled. Skipping.`);
-        }
-        return !project.disabled;
-    }).map(async project => {
-        await scrape(project.topic, project.url)
-    }))
-};
-
-program();
+    const accountSid = process.env.TWILIO
