@@ -2,7 +2,7 @@ name: Yad2 Scraper
 
 on:
   schedule:
-    - cron: '*/15 5-17 * * *'
+    - cron: '*/15 5-23 * * *'  # כל 15 דקות בין 05:00–23:00
   workflow_dispatch:
     branches:
       - '**'
@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -24,10 +25,13 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "${{ secrets.GIT_CONFIG_EMAIL }}"
 
-      - name: Run scraper
+      - name: Run scraper (Telegram + WhatsApp)
         run: |
           export API_TOKEN=${{ secrets.API_TOKEN }}
           export CHAT_ID=${{ secrets.CHAT_ID }}
+          export WHATSAPP_TOKEN=${{ secrets.WHATSAPP_TOKEN }}
+          export PHONE_NUMBER_ID=${{ secrets.PHONE_NUMBER_ID }}
+          export RECIPIENT_PHONE=${{ secrets.RECIPIENT_PHONE }}
           yarn scrape
 
       - name: Push new json data if needed
